@@ -1,6 +1,9 @@
 #![allow(unused)]
-use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash, rc::Rc};
-
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    hash::Hash,
+    rc::Rc,
+};
 
 pub struct Graph<T> {
     // We have a set of nodes called Vertex set
@@ -14,40 +17,57 @@ pub struct Graph<T> {
 
 impl<T: Eq + PartialEq + Hash> Graph<T> {
     pub fn new() -> Graph<T> {
-        todo!();
+        Graph {
+            edges: HashMap::new(),
+        }
     }
 
     pub fn vertices(&self) -> Vec<Rc<T>> {
-        todo!();
+        self.edges.keys().cloned().collect()
     }
 
     pub fn insert_vertex(&mut self, u: T) {
-        todo!();
+        self.edges.entry(Rc::new(u)).or_insert_with(HashSet::new);
     }
 
     pub fn insert_edge(&mut self, u: T, v: T) {
         // node u can already be in the HashMap or it is not in the HashMap
-        todo!();
+        let u = Rc::new(u);
+        let v = Rc::new(v);
+        self.edges
+            .entry(u.clone())
+            .or_insert_with(HashSet::new)
+            .insert(v.clone());
+        self.edges.entry(v).or_insert_with(HashSet::new);
     }
 
     pub fn remove_edge(&mut self, u: &T, v: &T) {
-        todo!();
+        if let Some(neighbors) = self.edges.get_mut(u) {
+            neighbors.retain(|x| **x != *v);
+        }
     }
 
     pub fn remove_vertex(&mut self, u: &T) {
-        todo!();
+        self.edges.remove(u);
+        for neighbors in self.edges.values_mut() {
+            neighbors.retain(|x| **x != *u);
+        }
     }
 
     pub fn contains_vertex(&self, u: &T) -> bool {
-        todo!();
+        self.edges.contains_key(u)
     }
 
     pub fn contains_edge(&mut self, u: &T, v: &T) -> bool {
-        todo!();
+        self.edges
+            .get(u)
+            .map_or(false, |neighbors| neighbors.contains(v))
     }
 
     pub fn neighbors(&self, u: &T) -> Vec<Rc<T>> {
-        todo!();
+        self.edges
+            .get(u)
+            .map_or(Vec::new(), |neighbors| neighbors.iter().cloned().collect())
     }
 
     pub fn path_exists_between(&self, u: &T, v: &T) -> bool {
@@ -55,7 +75,28 @@ impl<T: Eq + PartialEq + Hash> Graph<T> {
         // bfs requires a queue data structure refer https://doc.rust-lang.org/std/collections/struct.VecDeque.html
         // dfs requires recursion
         // in both cases keep track of visited nodes using HashSet
-        todo!();
+        let mut queue = VecDeque::new();
+        let mut visited = HashSet::new();
+
+        queue.push_back(u);
+        visited.insert(u);
+
+        while let Some(current) = queue.pop_front() {
+            if current == v {
+                return true;
+            }
+
+            if let Some(neighbors) = self.edges.get(current) {
+                for neighbor in neighbors {
+                    if !visited.contains(&**neighbor) {
+                        visited.insert(&**neighbor);
+                        queue.push_back(&**neighbor);
+                    }
+                }
+            }
+        }
+
+        false
     }
 }
 
@@ -168,5 +209,63 @@ mod tests {
         assert!(graph.contains_vertex(&"B"));
         assert!(graph.contains_vertex(&"C"));
     }
-}
 
+    #[test]
+    fn test_remove_vertex_and_connected_edges() {
+        let mut graph = Graph::new();
+        graph.insert_edge("A", "B");
+        graph.insert_edge("B", "C");
+        graph.insert_edge("C", "A");
+
+        graph.remove_vertex(&"B");
+
+        assert!(!graph.contains_vertex(&"B"));
+        assert!(!graph.contains_edge(&"A", &"B"));
+        assert!(!graph.contains_edge(&"B", &"C"));
+        assert!(graph.contains_edge(&"C", &"A"));
+    }
+
+    #[test]
+    fn test_neighbors() {
+        let mut graph = Graph::new();
+        graph.insert_edge("A", "B");
+        graph.insert_edge("A", "C");
+        graph.insert_edge("B", "D");
+
+        let neighbors = graph.neighbors(&"A");
+        assert_eq!(neighbors.len(), 2);
+        assert!(neighbors.iter().any(|x| **x == "B"));
+        assert!(neighbors.iter().any(|x| **x == "C"));
+
+        let neighbors = graph.neighbors(&"B");
+        assert_eq!(neighbors.len(), 1);
+        assert!(neighbors.iter().any(|x| **x == "D"));
+
+        let neighbors = graph.neighbors(&"C");
+        assert_eq!(neighbors.len(), 0);
+    }
+
+    #[test]
+    fn test_cyclic_graph() {
+        let mut graph = Graph::new();
+        graph.insert_edge("A", "B");
+        graph.insert_edge("B", "C");
+        graph.insert_edge("C", "A");
+
+        assert!(graph.path_exists_between(&"A", &"C"));
+        assert!(graph.path_exists_between(&"B", &"A"));
+        assert!(graph.path_exists_between(&"C", &"B"));
+    }
+
+    #[test]
+    fn test_disconnected_components() {
+        let mut graph = Graph::new();
+        graph.insert_edge("A", "B");
+        graph.insert_edge("C", "D");
+
+        assert!(graph.path_exists_between(&"A", &"B"));
+        assert!(graph.path_exists_between(&"C", &"D"));
+        assert!(!graph.path_exists_between(&"A", &"C"));
+        assert!(!graph.path_exists_between(&"B", &"D"));
+    }
+}
