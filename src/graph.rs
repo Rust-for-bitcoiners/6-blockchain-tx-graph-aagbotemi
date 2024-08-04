@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
 };
 
+#[derive(Debug)]
 pub struct Graph<T> {
     // We have a set of nodes called Vertex set
     // And each node can point to any other node in the vertex set
