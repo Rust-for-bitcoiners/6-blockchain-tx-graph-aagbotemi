@@ -1,5 +1,6 @@
 use bitcoin::hash_types::Txid;
 use bitcoin::Block;
+use bitcoincore_rpc::RpcApi;
 use bitcoincore_rpc::{Auth, Client};
 use std::env;
 
@@ -15,8 +16,6 @@ lazy_static! {
         Client::new(&rpc_url, Auth::UserPass(rpc_user, rpc_password)).unwrap()
     };
 }
-
-use bitcoincore_rpc::{Error, RpcApi};
 
 pub fn build_transaction_graph(start_height: u64, end_height: u64) -> Graph<Txid> {
     // Every Transaction has a set of Inputs and outputs
@@ -44,4 +43,47 @@ pub fn build_transaction_graph(start_height: u64, end_height: u64) -> Graph<Txid
     }
 
     graph
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use bitcoin::hash_types::Txid;
+    use bitcoind::bitcoincore_rpc::{bitcoin::Amount, RpcApi};
+    use bitcoind::BitcoinD;
+    use std::env;
+
+    fn setup_bitcoind() -> BitcoinD {
+        dotenv::dotenv().ok();
+        let bitcoind_path = env::var("BITCOIND_PATH").expect("BITCOIND_PATH must be set");
+        BitcoinD::new(bitcoind_path).unwrap()
+    }
+
+    #[test]
+    fn test_build_transaction_graph() {
+        let bitcoind = setup_bitcoind();
+        let client = &bitcoind.client;
+        
+        let alice = bitcoind.create_wallet("alice").unwrap();
+        assert_eq!(
+            Amount::from_btc(50.0).unwrap(),
+            alice.get_balances().unwrap().mine.trusted
+        );
+        let address = alice.get_new_address(None, None).unwrap();
+        let amount = Amount::from_btc(10.0).unwrap();
+
+        client.generate_to_address(101, &address).unwrap(); // Generate 101 blocks to get some mature coins
+        client.generate_to_address(1, &address).unwrap();
+
+        let txid = alice
+            .send_to_address(&address, amount, None, None, None, None, None, None)
+            .unwrap();
+
+
+        let graph = build_transaction_graph(0, 102);
+        let check = graph.contains_vertex(&txid);
+
+        assert!(check, "Txn not found in graph");
+    }
 }
